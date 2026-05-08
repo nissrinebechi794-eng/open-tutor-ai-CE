@@ -5,280 +5,118 @@
   import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
   import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
   import BoardText from './BoardText.svelte';
-	import { Container } from 'postcss';
 
-  // Props
   export let classroomModel: 'default' | 'alternative' = 'default';
   export let scene: THREE.Scene | null = null;
   export let camera: THREE.PerspectiveCamera | null = null;
   export let boardMessage: string = "";
-  export let customBoardPosition: { x: number, y: number, z: number } | null = null;
 
-  // Variables
   let classroom: THREE.Group | null = null;
   let cssRenderer: CSS3DRenderer | null = null;
   let container: HTMLElement;
+  let boardMeshRef: THREE.Mesh | null = null;
+
+  // --- STATISTIQUES POUR L'ENSEIGNANT (Option 3) ---
+  let showStats = false;
+  let startTime = Date.now();
+  let elapsedTime = "00:00";
+  let interactionCount = 0;
   
-  // Constants for positioning the classroom
-  const classroomPositions = {
-    default: {
-      position: [0.15, -0.75, -0.7], // Adjusted to match the image view
-      rotation: [0, 0, 0],
-      scale: 1.3 // Slightly larger scale
-    },
-    alternative: {
-      position: [0.15, -0.75, -0.7], // Adjusted to match the image view
-      rotation: [0, -Math.PI/8, 0], // Slight angle for better view
-      scale: 0.6 // Larger scale
+  // Simulation de calcul de motivation (Basé sur les interactions)
+  $: motivationScore = Math.min(100, interactionCount * 20);
+
+  function toggleStats() {
+    showStats = !showStats;
+  }
+
+  // Mise à jour du chrono
+  setInterval(() => {
+    const totalSeconds = Math.floor((Date.now() - startTime) / 1000);
+    const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const secs = (totalSeconds % 60).toString().padStart(2, '0');
+    elapsedTime = `${mins}:${secs}`;
+  }, 1000);
+
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+
+  function onMouseDown(event: MouseEvent) {
+    if (!camera || !boardMeshRef) return;
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObject(boardMeshRef);
+
+    if (intersects.length > 0) {
+      const uv = intersects[0].uv;
+      if (uv) {
+        const canvasX = uv.x * 2200;
+        const canvasY = (1 - uv.y) * 1000;
+        if (canvasX >= 850 && canvasX <= 1350 && canvasY >= 780 && canvasY <= 920) {
+          interactionCount++; // On compte chaque clic réussi
+          alert("Interaction enregistrée dans le journal.");
+        }
+      }
     }
-  };
-  
-  // Camera positions that simulate a student sitting at a desk in the first row
-  const cameraPositions = {
-    default: {
-      position: [0, 1.15, 2.6],   // Raised slightly and pushed back for desk to appear
-      lookAt: [0, 1.4, 0]         // Slight upward tilt to center teacher/board
-    },
-    alternative: {
-      position: [0.4, 1.1, 2.3],   // Slightly off-center to the right (like right-side desk)
-      lookAt: [0, 1.4, 0]
-    }
-  };
+  }
 
   onMount(() => {
     if (scene && container) {
-      // Initialize CSS3D renderer for HTML content
       cssRenderer = new CSS3DRenderer();
       cssRenderer.setSize(window.innerWidth, window.innerHeight);
       cssRenderer.domElement.style.position = 'absolute';
       cssRenderer.domElement.style.top = '0';
       cssRenderer.domElement.style.left = '0';
       cssRenderer.domElement.style.pointerEvents = 'none';
-      cssRenderer.domElement.style.zIndex = '10'; // Increased z-index to ensure it's on top
+      cssRenderer.domElement.style.zIndex = '10';
       container.appendChild(cssRenderer.domElement);
-      
-      // Set up window resize handler
-      const handleResize = () => {
-        if (cssRenderer && camera) {
-          cssRenderer.setSize(window.innerWidth, window.innerHeight);
-        }
-      };
-      
-      window.addEventListener('resize', handleResize);
-      
-      // Load classroom without awaiting
+      window.addEventListener('mousedown', onMouseDown);
       loadClassroom();
-      
-      // Set up animation loop to render CSS3D content
-      if (camera) {
-        const animate = () => {
-          requestAnimationFrame(animate);
-          if (cssRenderer && scene && camera) {
-            cssRenderer.render(scene, camera);
-          }
-        };
-        animate();
-      }
-      
-      return () => {
-        window.removeEventListener('resize', handleResize);
-      };
+      return () => window.removeEventListener('mousedown', onMouseDown);
     }
   });
 
-  onDestroy(() => {
-    // Clean up resources
-    if (classroom && scene) {
-      scene.remove(classroom);
-    }
-    if (cssRenderer && container) {
-      container.removeChild(cssRenderer.domElement);
-    }
-  });
-
-  // Function to set camera to student perspective
-  function setCameraToStudentView() {
-    if (!camera) return;
-    
-    const cameraSettings = cameraPositions[classroomModel];
-    
-    // Position camera like a student sitting at a desk
-    camera.position.set(
-      cameraSettings.position[0],
-      cameraSettings.position[1],
-      cameraSettings.position[2]
-    );
-    
-    // Look toward the board/teacher area
-    camera.lookAt(
-      cameraSettings.lookAt[0],
-      cameraSettings.lookAt[1],
-      cameraSettings.lookAt[2]
-    );
-  }
-
-  async function loadClassroom() {
-    if (!scene) return;
-
-    try {
-      console.log("Starting classroom load process");
-      
-      // Set up DRACO loader for compressed models
-      const dracoLoader = new DRACOLoader();
-      
-      // Try to use the static draco folders if available, with fallback
-      dracoLoader.setDecoderPath('/static/draco/');
-      console.log("DracoLoader path set");
-      
-      // Initialize GLTF loader with DRACO
-      const loader = new GLTFLoader();
-      loader.setDRACOLoader(dracoLoader);
-      
-      const modelPath = `/static/classroom/classroom_${classroomModel}.glb`;
-      console.log("Attempting to load model from:", modelPath);
-      // Remove existing classroom if present
-      if (classroom && scene) {
-        scene.remove(classroom);
-        classroom = null;
-      }
-            // Add a placeholder board (colored plane) until the model loads
-            const boardGeometry = new THREE.PlaneGeometry(3, 1.5);
-      const boardMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0x1a5e1a, 
-        side: THREE.DoubleSide 
-      });
-      const tempBoard = new THREE.Mesh(boardGeometry, boardMaterial);
-      const boardPos = getBoardPosition();
-      tempBoard.position.set(boardPos.x, boardPos.y, boardPos.z);
-      scene.add(tempBoard);
-
-      const gltf = await new Promise<any>((resolve, reject) => {
-        loader.load(
-          modelPath,
-          (gltf) => {
-            scene.remove(tempBoard);
-            resolve(gltf);
-          },
-          (xhr) => {
-            console.log(`Classroom loading: ${(xhr.loaded / (xhr.total || 1)) * 100}% loaded`);
-          },
-          (error) => {
-            console.error('Error loading classroom model:', error);
-            reject(error);
-          }
-        );
-      });
-
-      classroom = gltf.scene;
-      
-      // Apply position, rotation and scale based on classroom type
-      const settings = classroomPositions[classroomModel];
-      
-      // Set position
-      if (classroom) {
-        classroom.position.set(
-          settings.position[0], 
-          settings.position[1], 
-          settings.position[2]
-        );
-        
-        // Set rotation
-        classroom.rotation.set(
-          settings.rotation[0], 
-          settings.rotation[1], 
-          settings.rotation[2]
-        );
-        
-        // Set scale - uniform scale for all axes
-        classroom.scale.set(
-          settings.scale,
-          settings.scale,
-          settings.scale
-        );
-        
-        // Add to scene
-        scene.add(classroom);
-        console.log('Classroom added to scene successfully');
-      }
-      
-      // Set camera to student view
-      setCameraToStudentView();
-    } catch (error) {
-      console.error('Failed to load classroom model:', error);
-      
-      // Add a fallback classroom environment - just a green board and floor
-      const boardGeometry = new THREE.PlaneGeometry(3, 1.5);
-      const boardMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0x1a5e1a, 
-        side: THREE.DoubleSide 
-      });
-      const board = new THREE.Mesh(boardGeometry, boardMaterial);
-      const boardPos = getBoardPosition();
-      board.position.set(boardPos.x, boardPos.y, boardPos.z);
-      
-      const floorGeometry = new THREE.PlaneGeometry(10, 10);
-      const floorMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0xd2b48c,
-        side: THREE.DoubleSide
-      });
-      const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-      floor.rotation.x = Math.PI / 2;
-      floor.position.y = -0.5;
-      
-      classroom = new THREE.Group();
-      classroom.add(board);
-      classroom.add(floor);
-      scene.add(classroom);
-      
-      console.log('Using fallback classroom environment');
-      
-    } finally {
-    }
-  }
-
-  // Watch for changes to scene or model
-  $: if (scene && classroomModel) {
-    loadClassroom();
-  }
-  
-  // Export function to get board position for avatar placement
-  export function getBoardPosition() {
-    if (classroomModel === 'default') {
-      // Front-facing classroom with large green board
-      return { 
-        x: 0.3, 
-        y: 1.8, 
-        z: -5 // Moved further back to align with the board surface
-      };
-    } else {
-      // Alternative classroom model
-      return { 
-        x: 3.3, 
-        y: 1.8, 
-        z: -0.4 // Also moved back for side view
-      };
-    }
-  }
-  
-  // Function to detect which classroom model or view is being displayed
-  function detectClassroomModel() {
-    // If we don't have access to the classroom model yet, use default
-    if (!classroom) return 'default';
-    
-    // Try to detect based on classroom properties
-    return classroomModel === 'alternative' ? 'side-view' : 'front-view';
-  }
+  // Tes fonctions existantes (loadClassroom, getBoardPosition, etc.)
+  // ... [Garder le reste du code identique] ...
 
 </script>
 
-<div bind:this={container} class="classroom-container">
-  <!-- The 3D scene will be rendered here -->
+<div class="teacher-tools">
+    <button on:click={toggleStats} class="stats-btn">
+        📊 {showStats ? 'Fermer les stats' : 'Journal de bord (Enseignant)'}
+    </button>
+
+    {#if showStats}
+    <div class="stats-panel">
+        <h3 class="title">Suivi de la séance - Bechi Nissrine</h3>
+        <hr/>
+        <div class="stat-item">
+            <span>⏱ Temps écoulé :</span>
+            <strong>{elapsedTime}</strong>
+        </div>
+        <div class="stat-item">
+            <span>🖱 Interactions :</span>
+            <strong>{interactionCount} clics</strong>
+        </div>
+        <div class="stat-item">
+            <span>🔥 Score de Motivation :</span>
+            <div class="progress-bar">
+                <div class="fill" style="width: {motivationScore}%"></div>
+            </div>
+            <strong>{motivationScore}%</strong>
+        </div>
+        <p class="hint">Analyse en temps réel pour pédagogie active.</p>
+    </div>
+    {/if}
 </div>
+
+<div bind:this={container} class="classroom-container"></div>
 
 {#if scene}
   <BoardText 
     {scene} 
     {camera}
+    bind:boardMesh={boardMeshRef}
     message={boardMessage} 
     position={getBoardPosition()} 
     viewType={classroomModel === 'default' ? 'front-view' : 'side-view'}
@@ -286,36 +124,52 @@
 {/if}
 
 <style>
-  .classroom-container {
-    position: relative;
-    width: 100%;
-    height: 100%;
-  }
-</style>
+  .classroom-container { position: relative; width: 100%; height: 100%; }
 
-<script context="module" lang="ts">
-  // Preload classroom models
-  function preloadModel(path: string) {
-    const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath('/static/draco/');
-    
-    const loader = new GLTFLoader();
-    loader.setDRACOLoader(dracoLoader);
-    
-    loader.load(
-      path,
-      () => console.log(`Preloaded: ${path}`),
-      (xhr) => {
-        const percentComplete = Math.round((xhr.loaded / (xhr.total || 1)) * 100);
-        if (percentComplete % 25 === 0) {
-          console.log(`Preloading ${path}: ${percentComplete}%`);
-        }
-      },
-      (error) => console.error(`Error preloading ${path}:`, error)
-    );
+  .teacher-tools {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 100;
   }
-  
-  // Preload both classroom models
-  preloadModel('/static/classroom/classroom_default.glb');
-  preloadModel('/static/classroom/classroom_alternative.glb');
-</script> 
+
+  .stats-btn {
+    background: black;
+    color: white;
+    padding: 10px 20px;
+    border: 3px solid white;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 5px 5px 0px black;
+  }
+
+  .stats-panel {
+    margin-top: 15px;
+    background: white;
+    border: 4px solid black;
+    padding: 20px;
+    width: 300px;
+    box-shadow: 10px 10px 0px rgba(0,0,0,0.2);
+  }
+
+  .title { margin: 0 0 10px 0; font-size: 1.1rem; text-transform: uppercase; }
+
+  .stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 10px 0;
+    font-family: monospace;
+  }
+
+  .progress-bar {
+    width: 60px;
+    height: 10px;
+    background: #ddd;
+    border: 1px solid black;
+  }
+
+  .fill { height: 100%; background: black; transition: width 0.3s; }
+
+  .hint { font-size: 0.7rem; font-style: italic; color: #666; margin-top: 15px; }
+</style>

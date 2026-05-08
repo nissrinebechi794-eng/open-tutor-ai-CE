@@ -1,4 +1,3 @@
-<!-- CourseCard.svelte -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { getContext } from 'svelte';
@@ -7,24 +6,19 @@
 
 	export let title: string;
 	export let progress: number = 0;
-	export let subject: string = 'mathematics';
-	export let href: string;
+	export let subject: string = 'computer-science';
+	export let href: string = '';
 
-	// Subject configuration based on SupportCreation.svelte
-	const subjectConfig: Record<string, { icon: string; color: string }> = {
-		mathematics: { icon: '📊', color: 'bg-blue-50 dark:bg-blue-900/10' },
-		science: { icon: '🔬', color: 'bg-teal-50 dark:bg-teal-900/10' },
-		history: { icon: '🏛️', color: 'bg-amber-50 dark:bg-amber-900/10' },
-		'computer-science': { icon: '💻', color: 'bg-indigo-50 dark:bg-indigo-900/10' },
-		english: { icon: '📚', color: 'bg-purple-50 dark:bg-purple-900/10' },
-		geography: { icon: '🌍', color: 'bg-green-50 dark:bg-green-900/10' },
-		chemistry: { icon: '🔬', color: 'bg-rose-50 dark:bg-rose-900/10' },
-		biology: { icon: '🌿', color: 'bg-emerald-50 dark:bg-emerald-900/10' },
-		physics: { icon: '⚛️', color: 'bg-cyan-50 dark:bg-cyan-900/10' }
+	// Ajout d'une propriété accent pour des bordures visibles
+	const subjectConfig: Record<string, { icon: string; color: string; border: string }> = {
+		mathematics: { icon: '📊', color: 'bg-blue-50/50', border: 'border-blue-400' },
+		science: { icon: '🔬', color: 'bg-teal-50/50', border: 'border-teal-400' },
+		'computer-science': { icon: '💻', color: 'bg-indigo-50/50', border: 'border-indigo-400' },
+		english: { icon: '📚', color: 'bg-purple-50/50', border: 'border-purple-400' }
+		// ... les autres suivront le même modèle
 	};
 
-	// Get subject config or fallback to mathematics if subject not found
-	$: subjectStyle = subjectConfig[subject] || subjectConfig.mathematics;
+	$: subjectStyle = subjectConfig[subject] || subjectConfig['computer-science'];
 
 	function handleClick() {
 		goto('/student/chat');
@@ -32,45 +26,49 @@
 </script>
 
 <button
-	class={`block w-full p-6 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 relative overflow-hidden group ${subjectStyle.color} min-h-[200px] h-full flex flex-col justify-between`}
+	class="group relative flex flex-col justify-between w-full p-8 rounded-3xl border-2 transition-all duration-300 text-left min-h-[240px] shadow-sm
+	{subjectStyle.color} {subjectStyle.border}
+	hover:shadow-2xl hover:-translate-y-2 hover:bg-white dark:hover:bg-gray-800"
 	on:click={handleClick}
 >
-	<div>
-		<div class="flex items-start justify-between mb-4">
-			<div class="p-3 rounded-full bg-white dark:bg-gray-800 shadow-sm">
-				<span class="text-2xl leading-none">{subjectStyle.icon}</span>
-			</div>
-		</div>
-
-		<h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 group-hover:text-gray-900 dark:group-hover:text-white transition-colors text-left line-clamp-2">
-			{title}
-		</h3>
+	<div class="absolute top-4 right-4 px-3 py-1 bg-white dark:bg-gray-700 border {subjectStyle.border} rounded-full shadow-sm">
+		<span class="text-[10px] font-black uppercase tracking-widest text-gray-700 dark:text-gray-200">
+			Cours actif
+		</span>
 	</div>
 
-	<div class="relative pt-1 mt-auto">
-		<div class="flex mb-2 items-center justify-between">
-			<div>
-				<span class="text-xs font-semibold inline-block text-gray-600 dark:text-gray-400">
-					{progress || 0}% Complete
-				</span>
-			</div>
+	<div>
+		<div class="mb-6 inline-flex p-4 rounded-2xl bg-white dark:bg-gray-700 border-2 {subjectStyle.border} group-hover:rotate-12 transition-transform shadow-md">
+			<span class="text-3xl leading-none">{subjectStyle.icon}</span>
 		</div>
-		<div class="overflow-hidden h-2 text-xs flex rounded bg-gray-200 dark:bg-gray-700">
+
+		<h3 class="text-xl font-extrabold text-gray-900 dark:text-white leading-tight mb-2">
+			{title}
+		</h3>
+		
+		<div class="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-sm opacity-0 group-hover:opacity-100 transition-opacity">
+			<span>Continuer l'apprentissage</span>
+			<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+			</svg>
+		</div>
+	</div>
+
+	<div class="w-full mt-6">
+		<div class="flex justify-between items-center mb-2">
+			<span class="text-xs font-black text-gray-500 uppercase">{progress || 0}% complété</span>
+		</div>
+		<div class="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden border border-gray-300 dark:border-gray-600">
 			<div
 				style="width: {progress || 0}%"
-				class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500 dark:bg-indigo-600 transition-all"
-			></div>
+				class="h-full bg-indigo-600 transition-all duration-1000 ease-out flex items-center justify-end px-1"
+			>
+                <div class="h-1.5 w-1.5 bg-white rounded-full animate-ping"></div>
+            </div>
 		</div>
 	</div>
 </button>
 
 <style>
-	/* Add tailwind line-clamp utility if not already included in your project */
-	.line-clamp-2 {
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-</style> 
+    /* Pas besoin de line-clamp ici, on mise sur l'espace */
+</style>
